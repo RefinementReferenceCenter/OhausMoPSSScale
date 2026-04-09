@@ -482,6 +482,7 @@ class OhausScaleApp(tk.Tk):
                 self._clearTag_btn.config(state=tk.NORMAL)
                 self._start_btn.config(state=tk.NORMAL)
                 self.unsavedData=True
+                self.title("Ohaus/MOPPS Scale Reader *")
 
         # print(statistics.mode(self.valuesList))
         # print(statistics.median(self.valuesList))
@@ -538,6 +539,7 @@ class OhausScaleApp(tk.Tk):
         for item in self._tree.get_children():
             self._tree.delete(item)
         self.unsavedData=False
+        self.title("Ohaus/MOPPS Scale Reader")
 
     def _export_csv(self):
         print(self._log)
@@ -557,6 +559,7 @@ class OhausScaleApp(tk.Tk):
             writer.writerows(self._log)
         messagebox.showinfo("Exported", f"Saved {len(self._log)} rows to:\n{path}")
         self.unsavedData=False
+        self.title("Ohaus/MOPPS Scale Reader")
 
     # ── Cleanup ───────────────────────────────────────────────────────────────
 
