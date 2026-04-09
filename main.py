@@ -25,7 +25,7 @@ from collections import deque
 import numpy as np
 from scipy.signal import medfilt
 from scipy.signal import order_filter
-import matplotlib.pyplot as plt
+
 # ── Ohaus serial protocol constants ──────────────────────────────────────────
 # Most Ohaus scales respond to "P\r\n" (print command) and stream data in the
 # format:  [sign][digits].[digits] [unit]\r\n  e.g.  "   1.234 g\r\n"
