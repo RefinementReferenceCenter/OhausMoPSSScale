@@ -306,12 +306,21 @@ class OhausScaleApp(tk.Tk):
         self._scaleSerial.write(b"PSN\r\n")
         self._scaleSerial.write(b"CP\r\n")
         self._scaleSerial.write(b"ON\r\n")
+    
     def _close(self):
         self._running=False
+
+        try:
+            self._scaleSerial.cancel_read()
+            self._moppsSerial.cancel_read()
+        except:
+            pass
         self._scaleSerial.write(b"0P\r\n")
         self._scaleSerial.write(b"OFF\r\n")
-        self._poll_thread.join()
-        self._poll_thread_mopps.join()
+        if self._poll_thread.is_alive():
+            self._poll_thread.join()
+        if self._poll_thread_mopps.is_alive():
+            self._poll_thread_mopps.join()
         if self._scaleSerial and self._scaleSerial.is_open:
             self._scaleSerial.close()
             self._scaleSerial = None
@@ -323,25 +332,31 @@ class OhausScaleApp(tk.Tk):
         
 
     def _continuous_scale_loop(self):
-        
-        while self._running and self._scaleSerial and self._scaleSerial.is_open:           
+        timeSinceLastWeight=0
+        while self._running and self._scaleSerial and self._scaleSerial.is_open:
+            timeSinceLastWeight=int(time.time() * 1000)-timeSinceLastWeight
+            if (timeSinceLastWeight<500):
+                           self._singleRead() 
             try:
                 
                 line = self._scaleSerial.readline().decode("ascii", errors="ignore").strip()
-                
+                print(line)
                 
                 
                 
                 if line:
-                    self._parse_and_display(line)
+                    timeSinceLastWeight=int(time.time() * 1000)
                     
+                    self.after(0, self._parse_and_display, line)
                 
             except serial.SerialException as ex:
                 template = "An exception of type {0} occurred. Arguments:\n{1!r}"
                 message = template.format(type(ex).__name__, ex.args)
                 print(message) 
-                self.after(0, self._on_scaleSerial_error)
+                
+                self.after(0, self._on_scaleSerial_error,message,"Scale Communication Error")
                 break
+        print("end of scale")
 
     def _continuous_mopps_loop(self):
         """Read lines as they arrive (for scales set to continuous output mode)."""
@@ -361,8 +376,10 @@ class OhausScaleApp(tk.Tk):
                 template = "An exception of type {0} occurred. Arguments:\n{1!r}"
                 message = template.format(type(ex).__name__, ex.args)
                 print(message) 
-                self.after(0, self._on_scaleSerial_error)
+                self.after(0, self._on_scaleSerial_error,message,"MoPSS Communication Error")
+                
                 break
+        print("end of mopss")
 
     def clearTag(self):
         self._id_var.set("Please Insert Mouse")
@@ -395,6 +412,10 @@ class OhausScaleApp(tk.Tk):
         r"(?P<sign>[+-]?)\s*(?P<value>[\d]+\.?[\d]*)\s+(?P<unit>\w+)\s*(?P<stable>[?]{0,2})\s*(?P<net>N?)"    )
 
     def _parse_and_display(self, raw: str):
+        
+        if self._running==False:
+                print (self._poll_thread.is_alive())
+                breakpoint()
         raw = raw.strip()
         
         if raw.upper() in ("OVER LOAD", "UNDER LOAD", "ERR"):
@@ -481,9 +502,11 @@ class OhausScaleApp(tk.Tk):
 
         # Store last parsed reading for log button
         
-    def _on_scaleSerial_error(self):
+    def _on_scaleSerial_error(self,message=None,title=None):
         self._status_var.set("● Connection lost")
         self._weight_var.set("ERR")
+        messagebox.showerror(title,message)
+        
 
 
     # ── Logging ───────────────────────────────────────────────────────────────
@@ -494,9 +517,17 @@ class OhausScaleApp(tk.Tk):
         except serial.SerialException:
             self.after(0, self._on_scaleSerial_error)
     def _tare_scale(self):
+        
         try:
             self._scaleSerial.reset_input_buffer()
             self._scaleSerial.write(b"T\r\n")
+        except serial.SerialException:
+            self.after(0, self._on_scaleSerial_error)
+    def _singleRead(self):
+        
+        try:
+            self._scaleSerial.reset_input_buffer()
+            self._scaleSerial.write(b"IP\r\n")
         except serial.SerialException:
             self.after(0, self._on_scaleSerial_error)
 
