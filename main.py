@@ -78,7 +78,7 @@ class OhausScaleApp(tk.Tk):
         self.last_id=None
         self.last_temp=None
         self.last_stableWeight=None
-
+        self.unsavedData=False
         
 
     # ── UI construction ───────────────────────────────────────────────────────
@@ -308,8 +308,11 @@ class OhausScaleApp(tk.Tk):
         self._scaleSerial.write(b"ON\r\n")
     
     def _close(self):
+        
+        if (self.unsavedData):
+            if not messagebox.askyesno("Quit", "There is unsaved data.\nDo you really want to quit?"):
+                return
         self._running=False
-
         try:
             self._scaleSerial.cancel_read()
             self._moppsSerial.cancel_read()
@@ -413,9 +416,7 @@ class OhausScaleApp(tk.Tk):
 
     def _parse_and_display(self, raw: str):
         
-        if self._running==False:
-                print (self._poll_thread.is_alive())
-                breakpoint()
+
         raw = raw.strip()
         
         if raw.upper() in ("OVER LOAD", "UNDER LOAD", "ERR"):
@@ -480,6 +481,7 @@ class OhausScaleApp(tk.Tk):
                 self._zero_btn.config(state=tk.NORMAL)
                 self._clearTag_btn.config(state=tk.NORMAL)
                 self._start_btn.config(state=tk.NORMAL)
+                self.unsavedData=True
 
         # print(statistics.mode(self.valuesList))
         # print(statistics.median(self.valuesList))
@@ -535,6 +537,7 @@ class OhausScaleApp(tk.Tk):
         self._log.clear()
         for item in self._tree.get_children():
             self._tree.delete(item)
+        self.unsavedData=False
 
     def _export_csv(self):
         print(self._log)
@@ -549,10 +552,11 @@ class OhausScaleApp(tk.Tk):
         if not path:
             return
         with open(path, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=["timestamp", "weight", "ID", "Temp"])
+            writer = csv.DictWriter(f, fieldnames=["timestamp", "weight", "stableWeight","ID", "Temp"])
             writer.writeheader()
             writer.writerows(self._log)
         messagebox.showinfo("Exported", f"Saved {len(self._log)} rows to:\n{path}")
+        self.unsavedData=False
 
     # ── Cleanup ───────────────────────────────────────────────────────────────
 
