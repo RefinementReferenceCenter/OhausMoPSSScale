@@ -34,7 +34,7 @@ from scipy.signal import order_filter
 PRINT_COMMAND = b"CP\r\n"       # Standard Ohaus print/send command
 READ_TIMEOUT  = 2            # Seconds to wait for a response
 POLL_INTERVAL = 0.5            # Seconds between auto-poll requests
-
+MOPSS_CHECK_PERIOD=5*60*1000
 
 # ── Colour palette (works on all platforms) ───────────────────────────────────
 CLR_BG        = "#f5f5f3"
@@ -330,7 +330,7 @@ class OhausScaleApp(tk.Tk):
             self.commandResponse=self.commandQueue[0][1]
             if self.commandResponse ==0:
                 self.commandQueue.popleft()
-        except serial.SerialException:
+        except (OSError,serial.SerialException):
             self.after(0, self._on_scaleSerial_error)
     def _close(self):
         
@@ -363,15 +363,16 @@ class OhausScaleApp(tk.Tk):
     def _continuous_scale_loop(self):
             
        # while self._running and self._scaleSerial and self._scaleSerial.is_open:
-            if (self._scaleSerial.in_waiting == 0):
-                if len(self.commandQueue)>0 and self.commandResponse==0:
-                    self.sendScaleCommand()
-                self.after(1,self._continuous_scale_loop)
-                return
-            if ((int(time.time() * 1000)-self.timeLastWeight)>500):
-                           self.scaleCommand(b"CP\r\n",False)
-                           
             try:
+                if (self._scaleSerial.in_waiting == 0):
+                    if len(self.commandQueue)>0 and self.commandResponse==0:
+                        self.sendScaleCommand()
+                    self.after(1,self._continuous_scale_loop)
+                    return
+                if ((int(time.time() * 1000)-self.timeLastWeight)>500):
+                            self.scaleCommand(b"CP\r\n",False)
+                           
+            
                 
                 line = self._scaleSerial.readline().decode("ascii", errors="ignore").strip()
                 print(line)
@@ -387,7 +388,10 @@ class OhausScaleApp(tk.Tk):
                                 self.commandResponse=0
                                 print("O")
                             elif(line[:2]=="ES"):
-                                self.sendScaleCommand()
+                                if self.commandQueue[0][0] in ("T","Z"):
+                                    self.commandQueue.popleft()
+                                else:
+                                    self.sendScaleCommand()
                                 print("E")
 
                         
@@ -396,7 +400,7 @@ class OhausScaleApp(tk.Tk):
                     self.after(0, self._parse_and_display, line)
 
                 
-            except serial.SerialException as ex:
+            except (OSError,serial.SerialException) as ex:
                 template = "An exception of type {0} occurred. Arguments:\n{1!r}"
                 message = template.format(type(ex).__name__, ex.args)
                 print(message) 
@@ -409,30 +413,32 @@ class OhausScaleApp(tk.Tk):
 
 
     def _continuous_mopss_loop(self):
-            if (self._mopssSerial.in_waiting == 0):
-                
-                self.after(1,self._continuous_mopss_loop)
-                return
-            
-            """Read lines as they arrive (for scales set to continuous output mode)."""
-        #while self._running and self._mopssSerial and self._mopssSerial.is_open:       
-            
-            
             try:
+                if ((int(time.time() * 1000)-self.timeLastFreq)>MOPSS_CHECK_PERIOD) and self.fetchingFreq==False:
+                        self._getMopssFreq()
+                        self.fetchingFreq=True
+                if (self._mopssSerial.in_waiting == 0):
+                    
+                    self.after(1,self._continuous_mopss_loop)
+                    return
+                
+                """Read lines as they arrive (for scales set to continuous output mode)."""
+            #while self._running and self._mopssSerial and self._mopssSerial.is_open:       
+                
+            
+            
                 line = self._mopssSerial.readline().decode("ascii", errors="ignore").strip()
                 
                 
                 
-                
+                print(self.timeLastFreq)
                 if line and self._running:
                     self.after(0, self._parse_mopps, line)
                     if (line[:4] == "FREQ"):
-                        self.timeLaseFreq=int(time.time() * 1000)
+                        self.timeLastFreq=int(time.time() * 1000)
                         self.fetchingFreq=False
-                if ((int(time.time() * 1000)-self.timeLaseFreq)>5000) and self.fetchingFreq==False:
-                    self._getMopssFreq()
-                    self.fetchingFreq=True
-            except serial.SerialException as ex:
+            
+            except (OSError,serial.SerialException) as ex:
                 template = "An exception of type {0} occurred. Arguments:\n{1!r}"
                 message = template.format(type(ex).__name__, ex.args)
                 print(message) 
@@ -579,11 +585,11 @@ class OhausScaleApp(tk.Tk):
 
     # ── Logging ───────────────────────────────────────────────────────────────
     def _zero_scale(self):
-        self.scaleCommand("Z")
+        self.scaleCommand(b"Z")
     def _tare_scale(self):
-        self.scaleCommand("T")
+        self.scaleCommand(b"T")
     def _singleRead(self):
-        self.scaleCommand("IP",False)
+        self.scaleCommand(b"IP",False)
     def _getMopssFreq(self):
         
         try:
