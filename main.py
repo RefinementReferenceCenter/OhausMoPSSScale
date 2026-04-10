@@ -406,6 +406,7 @@ class OhausScaleApp(tk.Tk):
                 print(message) 
                 
                 self.after(0, self._on_scaleSerial_error,message,"Scale Communication Error")
+                return
                 #break
 
             print("end of scale")
@@ -443,6 +444,7 @@ class OhausScaleApp(tk.Tk):
                 message = template.format(type(ex).__name__, ex.args)
                 print(message) 
                 self.after(0, self._on_scaleSerial_error,message,"MoPSS Communication Error")
+                return
                 
                 #break
             print("end of mopss")
@@ -579,7 +581,13 @@ class OhausScaleApp(tk.Tk):
     def _on_scaleSerial_error(self,message=None,title=None):
         self._status_var.set("● Connection lost")
         self._weight_var.set("ERR")
-        messagebox.showerror(title,message)
+        
+        if self.unsavedData:
+            messagebox.askyesno(title,message+"\n Do you want to save your data?")
+            self._export_csv()
+        else:
+            messagebox.showerror(title,message)
+        self._close()
         
 
 
