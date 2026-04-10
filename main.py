@@ -314,7 +314,7 @@ class OhausScaleApp(tk.Tk):
         self.scaleCommand(b"ON\r\n")
         self.scaleCommand(b"1M\r\n")
         self.scaleCommand(b"1U\r\n")
-        self.scaleCommand(b"PSN\r\n",False)
+        
         self.scaleCommand(b"CP\r\n",False)
         self.scaleCommand(b"ON\r\n")
         self.scaleCommand(b"CP\r\n",False)
@@ -328,6 +328,8 @@ class OhausScaleApp(tk.Tk):
             self._scaleSerial.write(self.commandQueue[0][0] + b"\r\n")
             print(self.commandQueue[0][0])
             self.commandResponse=self.commandQueue[0][1]
+            if self.commandResponse ==0:
+                self.commandQueue.popleft()
         except serial.SerialException:
             self.after(0, self._on_scaleSerial_error)
     def _close(self):
@@ -367,7 +369,6 @@ class OhausScaleApp(tk.Tk):
                 self.after(1,self._continuous_scale_loop)
                 return
             if ((int(time.time() * 1000)-self.timeLastWeight)>500):
-                           self._singleRead() 
                            self.scaleCommand(b"CP\r\n",False)
                            
             try:
@@ -578,25 +579,11 @@ class OhausScaleApp(tk.Tk):
 
     # ── Logging ───────────────────────────────────────────────────────────────
     def _zero_scale(self):
-        try:
-            self._scaleSerial.reset_input_buffer()
-            self._scaleSerial.write(b"Z\r\n")
-        except serial.SerialException:
-            self.after(0, self._on_scaleSerial_error)
+        self.scaleCommand("Z")
     def _tare_scale(self):
-        
-        try:
-            self._scaleSerial.reset_input_buffer()
-            self._scaleSerial.write(b"T\r\n")
-        except serial.SerialException:
-            self.after(0, self._on_scaleSerial_error)
+        self.scaleCommand("T")
     def _singleRead(self):
-        
-        try:
-            self._scaleSerial.reset_input_buffer()
-            self._scaleSerial.write(b"IP\r\n")
-        except serial.SerialException:
-            self.after(0, self._on_scaleSerial_error)
+        self.scaleCommand("IP",False)
     def _getMopssFreq(self):
         
         try:
