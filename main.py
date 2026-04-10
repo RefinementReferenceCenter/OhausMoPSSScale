@@ -63,22 +63,25 @@ class OhausScaleApp(tk.Tk):
         self.stableSampleSize=20
         self.valuesList=deque([],maxlen=self.sampleSize)
         self.stableList=deque([],maxlen=self.stableSampleSize)
-        
-        # State
-        self._scaleSerial: serial.Serial | None = None
-        
-        self._running = False
-        self._poll_thread: threading.Thread | None = None
-        self._log: list[dict] = []          # [{timestamp, weight, unit}, ...]
-
-        self._build_ui()
-        self._connect()
         self.measureRunning=False
         self.last_weight=None
         self.last_id=None
         self.last_temp=None
         self.last_stableWeight=None
         self.unsavedData=False
+        
+        # State
+        self._scaleSerial: serial.Serial | None = None
+        self._moppsSerial: serial.Serial | None = None
+        
+        self._running = False
+        self._poll_thread: threading.Thread | None = None
+        self._poll_thread_mopps: threading.Thread | None = None
+        self._log: list[dict] = []          # [{timestamp, weight, unit}, ...]
+
+        self._build_ui()
+        self._connect()
+
         
 
     # ── UI construction ───────────────────────────────────────────────────────
@@ -259,7 +262,8 @@ class OhausScaleApp(tk.Tk):
                 timeout=READ_TIMEOUT,
             )
         except serial.SerialException as e:
-            messagebox.showerror("Connection failed", str(e))
+            messagebox.showerror("Scale Connection failed", "Scale Could not be found. Exiting")
+            self._close()
             return
         try:
             self._moppsSerial = serial.Serial(
@@ -271,7 +275,8 @@ class OhausScaleApp(tk.Tk):
                 timeout=READ_TIMEOUT,
             )
         except serial.SerialException as e:
-            messagebox.showerror("Connection failed", str(e))
+            messagebox.showerror("MoPSS Connection failed", "MoPSS Could not be found. Exiting")
+            self._close()
             return
         
         self._running = True
@@ -321,9 +326,9 @@ class OhausScaleApp(tk.Tk):
         self._scaleSerial.write(b"0P\r\n")
         self._scaleSerial.write(b"OFF\r\n")
 
-        if self._poll_thread.is_alive():
+        if self._poll_thread and self._poll_thread.is_alive():
             self._poll_thread.join()
-        if self._poll_thread_mopps.is_alive():
+        if self._poll_thread_mopps  and  self._poll_thread_mopps.is_alive():
             self._poll_thread_mopps.join()
         if self._scaleSerial and self._scaleSerial.is_open:
             self._scaleSerial.close()
