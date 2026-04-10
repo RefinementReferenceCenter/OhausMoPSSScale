@@ -320,6 +320,7 @@ class OhausScaleApp(tk.Tk):
             pass
         self._scaleSerial.write(b"0P\r\n")
         self._scaleSerial.write(b"OFF\r\n")
+
         if self._poll_thread.is_alive():
             self._poll_thread.join()
         if self._poll_thread_mopps.is_alive():
@@ -347,7 +348,7 @@ class OhausScaleApp(tk.Tk):
                 
                 
                 
-                if line:
+                if line and self._running:
                     timeSinceLastWeight=int(time.time() * 1000)
                     
                     self.after(0, self._parse_and_display, line)
@@ -371,7 +372,7 @@ class OhausScaleApp(tk.Tk):
                 
                 
                 
-                if line:
+                if line and self._running:
                     self.after(0, self._parse_mopps, line)
                     
                 
@@ -416,10 +417,9 @@ class OhausScaleApp(tk.Tk):
 
     def _parse_and_display(self, raw: str):
         
-
         raw = raw.strip()
         
-        if raw.upper() in ("OVER LOAD", "UNDER LOAD", "ERR"):
+        if raw.upper() in ("OVER LOAD", "UNDER LOAD", "ERR") and self._running:
             self._weight_var.set(raw.upper())
             self._unit_var.set("")
             self._stability_var.set("⚠ Scale error / out of range")
@@ -437,15 +437,16 @@ class OhausScaleApp(tk.Tk):
 
         
         if not m:
-            self._stability_var.set(f"Unrecognised: {raw}")
+            if (self._running):
+                self._stability_var.set(f"Unrecognised: {raw}")
             return  
 
         stable_flag = m.group("stable").upper()
         value       = float((m.group("sign") + m.group("value")).replace(" ", ""))
         unit        = m.group("unit")
-
-        self._weight_var.set(f"{value:+2f} g" if value < 0 else f"{value:.2f} g")
-        self._unit_var.set(unit)
+        if (self._running):
+            self._weight_var.set(f"{value:+2f} g" if value < 0 else f"{value:.2f} g")
+            self._unit_var.set(unit)
         if self.measureRunning:
             self.valuesList.append(value)
             filtered = []
@@ -455,8 +456,9 @@ class OhausScaleApp(tk.Tk):
             if len(self.valuesList) >window_size :
                     filtered_value = order_filter(self.valuesList, np.ones(window_size), rank)
             med=statistics.median(self.valuesList)
-            self._meas_var.set(f"{med:+2f} g" if med < 0 else f"{med:.2f} g")
-                
+            if (self._running):
+                self._meas_var.set(f"{med:+2f} g" if med < 0 else f"{med:.2f} g")
+
             if "?" in stable_flag:
                 self._stability_var.set("⟳ Unstable")
             elif "" in stable_flag or stable_flag == "":
@@ -471,18 +473,19 @@ class OhausScaleApp(tk.Tk):
                 self.measureRunning=False
                 self.last_weight=statistics.median(self.valuesList)
                 self.last_stableWeight=statistics.median(self.stableList)
-                self._meas_var.set(f"{self.last_weight:+2f} g" if self.last_weight < 0 else f"{self.last_weight:.2f} g")
-                ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-                row = {"weight": self.last_weight,"stableWeight":self.last_stableWeight, "ID": self.last_id, "Temp":self.last_temp,"timestamp": ts,}
-                self._log.append(row)
-                self._tree.insert("", "end", values=(f"{self.last_weight:.2f}",f"{self.last_stableWeight:.2f}", self.last_id,self.last_temp,ts))
-                self._tree.yview_moveto(1)
-                self._tare_btn.config(state=tk.NORMAL)
-                self._zero_btn.config(state=tk.NORMAL)
-                self._clearTag_btn.config(state=tk.NORMAL)
-                self._start_btn.config(state=tk.NORMAL)
-                self.unsavedData=True
-                self.title("Ohaus/MOPPS Scale Reader *")
+                if (self._running):
+                    self._meas_var.set(f"{self.last_weight:+2f} g" if self.last_weight < 0 else f"{self.last_weight:.2f} g")
+                    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+                    row = {"weight": self.last_weight,"stableWeight":self.last_stableWeight, "ID": self.last_id, "Temp":self.last_temp,"timestamp": ts,}
+                    self._log.append(row)
+                    self._tree.insert("", "end", values=(f"{self.last_weight:.2f}",f"{self.last_stableWeight:.2f}", self.last_id,self.last_temp,ts))
+                    self._tree.yview_moveto(1)
+                    self._tare_btn.config(state=tk.NORMAL)
+                    self._zero_btn.config(state=tk.NORMAL)
+                    self._clearTag_btn.config(state=tk.NORMAL)
+                    self._start_btn.config(state=tk.NORMAL)
+                    self.unsavedData=True
+                    self.title("Ohaus/MOPPS Scale Reader *")
 
         # print(statistics.mode(self.valuesList))
         # print(statistics.median(self.valuesList))
