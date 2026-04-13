@@ -35,6 +35,7 @@ PRINT_COMMAND = b"CP\r\n"       # Standard Ohaus print/send command
 READ_TIMEOUT  = 2            # Seconds to wait for a response
 POLL_INTERVAL = 0.5            # Seconds between auto-poll requests
 MOPSS_CHECK_PERIOD=5*60*1000
+COMMAND_TIMEOUT=3000
 
 # ── Colour palette (works on all platforms) ───────────────────────────────────
 CLR_BG        = "#f5f5f3"
@@ -68,6 +69,7 @@ class OhausScaleApp(tk.Tk):
         self.last_id=None
         self.last_temp=None
         self.last_stableWeight=None
+        self.tareFlagg=False
         self.unsavedData=False
         self.commandResponse=0 #0=OKAY,1=waiting 2=error
         self.commandQueue=deque([],maxlen=10)
@@ -76,6 +78,7 @@ class OhausScaleApp(tk.Tk):
         self._mopssSerial: serial.Serial | None = None
         self.timeLastWeight=0
         self.timeLastFreq=0
+        self.timeLastCommandSent=0
         self.fetchingFreq=False
 
         self._running = False
@@ -84,9 +87,10 @@ class OhausScaleApp(tk.Tk):
         self._log: list[dict] = []          # [{timestamp, weight, unit}, ...]
 
         self._build_ui()
-        self._connect()
-        self.after(100,self._continuous_scale_loop)
-        self.after(120,self._continuous_mopss_loop)
+        
+        self.after(300,self._connect)
+        self.after(600,self._continuous_scale_loop)
+        self.after(610,self._continuous_mopss_loop)
 
         
 
@@ -108,23 +112,23 @@ class OhausScaleApp(tk.Tk):
         weight_frame.rowconfigure(2, weight=1)
         weight_frame.columnconfigure(0, weight=1)
         weight_frame.columnconfigure(1, weight=3)
+        weight_frame.columnconfigure(2, weight=1)
+        
         self._status_var = tk.StringVar(value="—")
         self._weight_var = tk.StringVar(value="—")
-        self._meas_var=tk.StringVar(value="N/A")
+        self._meas_var=tk.StringVar(value="Waiting for")
         self._id_var = tk.StringVar(value="Please Insert Mouse")
+        
         tk.Label(weight_frame, textvariable=self._id_var,
                  font=("Courier", 24, "bold"),
                  bg=CLR_SURFACE, fg=CLR_TEXT,
-                 anchor="center").grid(column=0, row=0,columnspan=2)
+                 anchor="center").grid(column=0, row=0,columnspan=3)
         tk.Label(weight_frame, textvariable=self._meas_var,
                  font=("Courier", 52, "bold"),
                  bg=CLR_SURFACE, fg=CLR_TEXT,
-                 anchor="center").grid(column=0, row=1,columnspan=2)
+                 anchor="center").grid(column=0, row=1,columnspan=3)
 
-        info_frame = tk.Frame(self, bg=CLR_SURFACE,
-                                highlightbackground=CLR_BORDER,
-                                highlightthickness=1)
-        info_frame.pack(fill="x", padx=16, pady=(0, 8))
+        
         tk.Label(weight_frame, textvariable=self._weight_var,
                  font=("Courier", 14, "bold"),
                  bg=CLR_SURFACE, fg=CLR_TEXT,width=15,
@@ -134,13 +138,17 @@ class OhausScaleApp(tk.Tk):
         self._stability_var = tk.StringVar(value="")
         tk.Label(weight_frame, textvariable=self._stability_var,
                  font=("", 9), bg=CLR_SURFACE,
-                 fg=CLR_MUTED, anchor="e").grid(column=1, row=2)
+                 fg=CLR_MUTED, anchor="e").grid(column=2, row=2)
+        self.tareLabel=tk.Label(weight_frame, text="TARE",
+                 font=("", 9), bg=CLR_SURFACE,
+                 fg=CLR_MUTED, anchor="e")
+        self.tareLabel.grid(column=1, row=2)
 
         self.pb = ttk.Progressbar(
                 weight_frame,
                 orient='horizontal',
                 mode='determinate')
-        self.pb.grid(column=0, row=3,columnspan=2,sticky='EW')
+        self.pb.grid(column=0, row=3,columnspan=3,sticky='EW')
         
 
         # Manual read button
@@ -309,27 +317,52 @@ class OhausScaleApp(tk.Tk):
         #self._poll_thread_mopps.start()
 
         
-        self._mopssSerial.write(b'4\r\n')
-
-        self.scaleCommand(b"ON\r\n")
-        self.scaleCommand(b"1M\r\n")
-        self.scaleCommand(b"1U\r\n")
         
-        self.scaleCommand(b"CP\r\n",False)
-        self.scaleCommand(b"ON\r\n")
-        self.scaleCommand(b"CP\r\n",False)
+
+        self.scaleCommand(b"ON")
+        self.sendScaleCommand()
+        count=0
+        while 1:
+            line = self._scaleSerial.readline().decode("ascii", errors="ignore").strip()
+            print(line)
+            if line=="OK!":
+                break
+        self.commandQueue.popleft()
+        self.scaleCommand(b"P")
+
+        self.sendScaleCommand()
+        while 1:
+            line = self._scaleSerial.readline().decode("ascii", errors="ignore").strip()
+            print(line)
+            if line=="ES":
+                time.sleep(0.25)
+                self.sendScaleCommand()
+            elif line[:3]=="RRC":
+                self.commandQueue.clear()
+                self.commandResponse =0
+                break
+
+
+        self._mopssSerial.write(b'4')
+        self.scaleCommand(b"1M")
+        self.scaleCommand(b"1U")
+        self.scaleCommand(b"CP",False)
+        self._meas_var.set("N/A")
+
+        
 
     def scaleCommand(self,command,waitForResponse=True):       
-        print(command)
+        
         self.commandQueue.append((command,waitForResponse))
         
     def sendScaleCommand(self):
         try:
             self._scaleSerial.write(self.commandQueue[0][0] + b"\r\n")
-            print(self.commandQueue[0][0])
+            print(b"Sending " + self.commandQueue[0][0])
             self.commandResponse=self.commandQueue[0][1]
             if self.commandResponse ==0:
                 self.commandQueue.popleft()
+            self.timeLastCommandSent=time.time()*1000
         except (OSError,serial.SerialException):
             self.after(0, self._on_scaleSerial_error)
     def _close(self):
@@ -364,6 +397,12 @@ class OhausScaleApp(tk.Tk):
             
        # while self._running and self._scaleSerial and self._scaleSerial.is_open:
             try:
+                
+                if self.commandResponse==1 and ((int(time.time() * 1000)-self.timeLastCommandSent)>3000):
+
+                    messagebox.showinfo("Command Timeout","Timeout Error")
+                    self.commandQueue.popleft()
+                    self.commandResponse=0
                 if (self._scaleSerial.in_waiting == 0):
                     if len(self.commandQueue)>0 and self.commandResponse==0:
                         self.sendScaleCommand()
@@ -371,12 +410,14 @@ class OhausScaleApp(tk.Tk):
                     return
                 if ((int(time.time() * 1000)-self.timeLastWeight)>500):
                             self.scaleCommand(b"CP\r\n",False)
+                
+                
                            
             
                 
                 line = self._scaleSerial.readline().decode("ascii", errors="ignore").strip()
                 print(line)
-                
+                print(len(self.commandQueue))
                 
                 
                 if line and self._running:
@@ -386,17 +427,22 @@ class OhausScaleApp(tk.Tk):
                             if (line[:3]=="OK!"):
                                 self.commandQueue.popleft()
                                 self.commandResponse=0
-                                print("O")
+                                raise StopIteration
                             elif(line[:2]=="ES"):
-                                if self.commandQueue[0][0] in ("T","Z"):
+                                if self.commandQueue[0][0] in (b"T",b"Z"):
+                                    messagebox.showinfo("Tare Failed","Check that something is on the scale")
                                     self.commandQueue.popleft()
+                                    self.commandResponse=0
+                                    
                                 else:
                                     self.sendScaleCommand()
-                                print("E")
+                                time.sleep(0.1)
+                                raise StopIteration
 
                         
-                            
-
+                    if(line[:2]=="ES" or line[:3]=="OK!"):
+                        print (len(self.commandQueue))
+                        raise StopIteration
                     self.after(0, self._parse_and_display, line)
 
                 
@@ -408,8 +454,9 @@ class OhausScaleApp(tk.Tk):
                 self.after(0, self._on_scaleSerial_error,message,"Scale Communication Error")
                 return
                 #break
-
-            print("end of scale")
+            except:                
+                pass
+            
             self.after(1,self._continuous_scale_loop)
 
 
@@ -432,7 +479,7 @@ class OhausScaleApp(tk.Tk):
                 
                 
                 
-                print(self.timeLastFreq)
+                
                 if line and self._running:
                     self.after(0, self._parse_mopps, line)
                     if (line[:4] == "FREQ"):
@@ -467,7 +514,6 @@ class OhausScaleApp(tk.Tk):
                 if (move == "E"):
                     tagID=m.group("id").upper()
                     tagTemp=m.group("temp").upper()
-                    print(tagID)
                     self._id_var.set(tagID)
                     self.last_id=tagID
                     self.last_temp=tagTemp
@@ -492,7 +538,7 @@ class OhausScaleApp(tk.Tk):
         
         if raw.upper() in ("OVER LOAD", "UNDER LOAD", "ERR") and self._running:
             self._weight_var.set(raw.upper())
-            self._unit_var.set("")
+
             self._stability_var.set("⚠ Scale error / out of range")
             return
 
@@ -513,10 +559,18 @@ class OhausScaleApp(tk.Tk):
 
         stable_flag = m.group("stable").upper()
         value       = float((m.group("sign") + m.group("value")).replace(" ", ""))
-        unit        = m.group("unit")
+        netFlag      = m.group("net")
         if (self._running):
             self._weight_var.set(f"{value:+2f} g" if value < 0 else f"{value:.2f} g")
-            self._unit_var.set(unit)
+            
+            if "?" in stable_flag:
+                self._stability_var.set("⟳ Unstable")
+            elif "" in stable_flag or stable_flag == "":
+                self._stability_var.set("✓ Stable")    
+            if "N" in netFlag:
+                self.tareLabel.grid(column=1, row=2)
+            elif "" in netFlag or netFlagg == "":
+                self.tareLabel.grid_forget()    
         if self.measureRunning:
             self.valuesList.append(value)
             filtered = []
@@ -529,10 +583,7 @@ class OhausScaleApp(tk.Tk):
             if (self._running):
                 self._meas_var.set(f"{med:+2f} g" if med < 0 else f"{med:.2f} g")
 
-            if "?" in stable_flag:
-                self._stability_var.set("⟳ Unstable")
-            elif "" in stable_flag or stable_flag == "":
-                self._stability_var.set("✓ Stable")    
+            if "" in stable_flag or stable_flag == "":
                 self.stableList.append(value)
                 print(self.stableList)
             # self.raw_line.set_data(range(len(self.valuesList)),self.valuesList)
@@ -593,15 +644,19 @@ class OhausScaleApp(tk.Tk):
 
     # ── Logging ───────────────────────────────────────────────────────────────
     def _zero_scale(self):
+        self.scaleCommand(b"0P")
         self.scaleCommand(b"Z")
+        self.scaleCommand(b"CP",False)
     def _tare_scale(self):
+        self.scaleCommand(b"0P")
         self.scaleCommand(b"T")
+        self.scaleCommand(b"CP",False)
     def _singleRead(self):
         self.scaleCommand(b"IP",False)
     def _getMopssFreq(self):
         
         try:
-            self._mopssSerial.reset_input_buffer()
+            
             self._mopssSerial.write(b"4\r\n")
             self.freqLabel.config(fg=CLR_PRIMARY)
             self._freq_var.set("Fetching MoPSS Frequency")
