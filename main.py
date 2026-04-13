@@ -341,13 +341,17 @@ class OhausScaleApp(tk.Tk):
                 self.commandQueue.clear()
                 self.commandResponse =0
                 break
-
+        _SCALE_RE = re.compile("^RRC .* Balance ID: (?P<balanceID>[\S]{10}) Balance Type: (?P<balanceType>[\S]*)")
+        m = _SCALE_RE.search(line)
 
         self._mopssSerial.write(b'4')
         self.scaleCommand(b"1M")
         self.scaleCommand(b"1U")
         self.scaleCommand(b"CP",False)
         self._id_var.set("Waiting For Mouse")
+        self.scaleID=m.group("balanceID").upper()
+        self.scaleType=m.group("balanceType").upper()
+        #self.title(self.scaleID)
         
 
         
@@ -417,8 +421,7 @@ class OhausScaleApp(tk.Tk):
             
                 
                 line = self._scaleSerial.readline().decode("ascii", errors="ignore").strip()
-                print(line)
-                print(len(self.commandQueue))
+
                 
                 
                 if line and self._running:
@@ -445,7 +448,7 @@ class OhausScaleApp(tk.Tk):
 
                         
                     if(line[:2]=="ES" or line[:3]=="OK!"):
-                        print (len(self.commandQueue))
+                        
                         raise StopIteration
                     self.after(0, self._parse_and_display, line)
 
@@ -453,7 +456,7 @@ class OhausScaleApp(tk.Tk):
             except (OSError,serial.SerialException) as ex:
                 template = "An exception of type {0} occurred. Arguments:\n{1!r}"
                 message = template.format(type(ex).__name__, ex.args)
-                print(message) 
+                
                 
                 self.after(0, self._on_scaleSerial_error,message,"Scale Communication Error")
                 return
@@ -493,17 +496,18 @@ class OhausScaleApp(tk.Tk):
             except (OSError,serial.SerialException) as ex:
                 template = "An exception of type {0} occurred. Arguments:\n{1!r}"
                 message = template.format(type(ex).__name__, ex.args)
-                print(message) 
+                
                 self.after(0, self._on_scaleSerial_error,message,"MoPSS Communication Error")
                 return
                 
                 #break
-            print("end of mopss")
+        
             self.after(1,self._continuous_mopss_loop)
 
     def clearTag(self):
         self._id_var.set("Please Insert Mouse")
         self._meas_var.set("N/A")
+        
     _MOPPS_RE = re.compile(r"RA1,\d*,(?P<id>\d{3}_\d*),(?P<temp>\d*),\d*,(?P<movement>[EX])")
     
     def _parse_mopps(self, raw: str):
