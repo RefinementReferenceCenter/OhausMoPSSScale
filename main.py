@@ -116,8 +116,8 @@ class OhausScaleApp(tk.Tk):
         
         self._status_var = tk.StringVar(value="—")
         self._weight_var = tk.StringVar(value="—")
-        self._meas_var=tk.StringVar(value="Waiting for")
-        self._id_var = tk.StringVar(value="Please Insert Mouse")
+        self._meas_var=tk.StringVar(value="N/A")
+        self._id_var = tk.StringVar(value="Waiting for Scale")
         
         tk.Label(weight_frame, textvariable=self._id_var,
                  font=("Courier", 24, "bold"),
@@ -347,7 +347,8 @@ class OhausScaleApp(tk.Tk):
         self.scaleCommand(b"1M")
         self.scaleCommand(b"1U")
         self.scaleCommand(b"CP",False)
-        self._meas_var.set("N/A")
+        self._id_var.set("Waiting For Mouse")
+        
 
         
 
@@ -425,8 +426,11 @@ class OhausScaleApp(tk.Tk):
                     if len(self.commandQueue)>0:
                         if self.commandResponse==1:
                             if (line[:3]=="OK!"):
+                                if self.commandQueue[0][0] in (b"T",b"Z"):
+                                    self._id_var.set("Waiting For Mouse")
                                 self.commandQueue.popleft()
                                 self.commandResponse=0
+
                                 raise StopIteration
                             elif(line[:2]=="ES"):
                                 if self.commandQueue[0][0] in (b"T",b"Z"):
@@ -644,10 +648,12 @@ class OhausScaleApp(tk.Tk):
 
     # ── Logging ───────────────────────────────────────────────────────────────
     def _zero_scale(self):
+        self._id_var.set("Zeroing...")
         self.scaleCommand(b"0P")
         self.scaleCommand(b"Z")
         self.scaleCommand(b"CP",False)
     def _tare_scale(self):
+        self._id_var.set("Taring...")
         self.scaleCommand(b"0P")
         self.scaleCommand(b"T")
         self.scaleCommand(b"CP",False)
