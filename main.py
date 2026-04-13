@@ -324,7 +324,7 @@ class OhausScaleApp(tk.Tk):
         count=0
         while 1:
             line = self._scaleSerial.readline().decode("ascii", errors="ignore").strip()
-            print(line)
+            #print(line)
             if line=="OK!":
                 break
         self.commandQueue.popleft()
@@ -333,7 +333,7 @@ class OhausScaleApp(tk.Tk):
         self.sendScaleCommand()
         while 1:
             line = self._scaleSerial.readline().decode("ascii", errors="ignore").strip()
-            print(line)
+            #print(line)
             if line=="ES":
                 time.sleep(0.25)
                 self.sendScaleCommand()
@@ -363,7 +363,7 @@ class OhausScaleApp(tk.Tk):
     def sendScaleCommand(self):
         try:
             self._scaleSerial.write(self.commandQueue[0][0] + b"\r\n")
-            print(b"Sending " + self.commandQueue[0][0])
+           #print(b"Sending " + self.commandQueue[0][0])
             self.commandResponse=self.commandQueue[0][1]
             if self.commandResponse ==0:
                 self.commandQueue.popleft()
@@ -481,9 +481,9 @@ class OhausScaleApp(tk.Tk):
             #while self._running and self._mopssSerial and self._mopssSerial.is_open:       
                 
             
-            
-                line = self._mopssSerial.readline().decode("ascii", errors="ignore").strip()
                 
+                line = self._mopssSerial.readline().decode("ascii", errors="ignore").strip()
+                print (line)
                 
                 
                 
@@ -507,7 +507,7 @@ class OhausScaleApp(tk.Tk):
     def clearTag(self):
         self._id_var.set("Please Insert Mouse")
         self._meas_var.set("N/A")
-        
+
     _MOPPS_RE = re.compile(r"RA1,\d*,(?P<id>\d{3}_\d*),(?P<temp>\d*),\d*,(?P<movement>[EX])")
     
     def _parse_mopps(self, raw: str):
@@ -524,15 +524,15 @@ class OhausScaleApp(tk.Tk):
                     tagTemp=m.group("temp").upper()
                     self._id_var.set(tagID)
                     self.last_id=tagID
-                    self.last_temp=tagTemp
+                    self.last_temp=((int(tagTemp)*0.2+74)-32)*5/9
             elif (raw[:4]=="FREQ"):
                 freq=float(raw[6:])/1000.0
-                self._freq_var.set(f"{freq:+3.1f} kHz")
+                self._freq_var.set(f"MoPSS Freq.: {freq:+3.1f} kHz")
                 if (abs(freq-134.2)<1):
                     self.freqLabel.config(fg="green")
                 else:
                     self.freqLabel.config(fg="red")
-                    self._freq_var.set(f"{freq:+3.1f} kHz\nAntenna Detuned!")
+                    self._freq_var.set(f"MoPSS Freq.: {freq:+3.1f} kHz\nAntenna Detuned!")
         return
 
 
@@ -593,7 +593,7 @@ class OhausScaleApp(tk.Tk):
 
             if "" in stable_flag or stable_flag == "":
                 self.stableList.append(value)
-                print(self.stableList)
+                #print(self.stableList)
             # self.raw_line.set_data(range(len(self.valuesList)),self.valuesList)
             # self.filtered_line.set_data(range(len(filtered_value)), filtered_value)
             # self.ax.relim()
